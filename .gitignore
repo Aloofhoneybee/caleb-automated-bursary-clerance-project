@@ -14,8 +14,8 @@ client/dist/
 client/dist-ssr/
 
 # Dynamic/Generated local receipts & uploads
-reciept/
-server/reciept/
+/reciept/
+server/reciept/*.pdf
 
 # Logs
 logs

@@ -4,7 +4,7 @@ const PDFDocument = require('pdfkit');
 const fs          = require('fs');
 const path        = require('path');
 
-// ── Brand tokens (identical to receipt design) ─────────────────────────────
+// ── Brand tokens (from design spec) ────────────────────────────────────────
 const COLORS = {
   primary:       '#0C9A5B',
   primaryDark:   '#08764A',
@@ -107,13 +107,26 @@ function drawIconBadge(doc, type, cx, cy, r) {
   doc.restore();
 }
 
+/** Draw a labeled field (label above, value below). Returns the height used. */
+function drawField(doc, label, value, x, y, width) {
+  doc.font('DejaVu').fontSize(9).fillColor(COLORS.textSecondary)
+     .text(label, x, y, { width });
+  doc.font('DejaVu-Bold').fontSize(11).fillColor(COLORS.text)
+     .text(value || '-', x, y + 13, { width });
+  const valueHeight = doc.heightOfString(value || '-', { width, fontSize: 11 });
+  return 13 + Math.max(valueHeight, 14) + 8; // label offset + value height + gap
+}
+
+// ── Main generator ────────────────────────────────────────────────────────────
+
 /**
- * Generate a Caleb University payment invoice (styled to match receipt).
+ * Generate a Caleb University payment receipt (card-based design).
  *
- * @param {res} Express response object
- * @param {object} data Invoice details
+ * @param {object} data
+ * @param {string} outputPath
+ * @param {string} logoPath
  */
-const generateInvoicePDF = async (res, data) => {
+function generateReceipt(data, outputPath, logoPath) {
   return new Promise((resolve, reject) => {
     const W = 595.28, H = 841.89; // A4 portrait in points
     const MARGIN = 40;
@@ -122,27 +135,24 @@ const generateInvoicePDF = async (res, data) => {
     const doc = new PDFDocument({
       size: 'A4',
       margin: 0,
-      info: { Title: `Payment Invoice - ${data.fullName}`, Author: 'Caleb University Bursary' },
+      info: { Title: `Payment Receipt - ${data.studentName}`, Author: 'Caleb University Bursary' },
     });
 
-    // Set response headers
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=invoice_${data.matricNumber || 'student'}.pdf`);
-
-    doc.pipe(res);
+    const stream = fs.createWriteStream(outputPath);
+    doc.pipe(stream);
+    stream.on('finish', () => resolve(outputPath));
+    stream.on('error', reject);
 
     // Register Unicode-capable fonts so the ₦ (Naira) symbol renders correctly
-    const recieptDir = path.join(__dirname, '..', 'reciept');
-    doc.registerFont('DejaVu',             path.join(recieptDir, 'DejaVuSans.ttf'));
-    doc.registerFont('DejaVu-Bold',        path.join(recieptDir, 'DejaVuSans-Bold.ttf'));
-    doc.registerFont('DejaVu-Oblique',     path.join(recieptDir, 'DejaVuSans-Oblique.ttf'));
-    doc.registerFont('DejaVu-BoldOblique', path.join(recieptDir, 'DejaVuSans-BoldOblique.ttf'));
-
-    const logoPath = path.join(__dirname, 'caleb-logo.png');
-    
+    // (PDFKit's built-in Helvetica does not include this glyph).
+    const fontsDir = path.join(__dirname, 'fonts');
+    doc.registerFont('DejaVu',             path.join(fontsDir, 'DejaVuSans.ttf'));
+    doc.registerFont('DejaVu-Bold',        path.join(fontsDir, 'DejaVuSans-Bold.ttf'));
+    doc.registerFont('DejaVu-Oblique',     path.join(fontsDir, 'DejaVuSans-Oblique.ttf'));
+    doc.registerFont('DejaVu-BoldOblique', path.join(fontsDir, 'DejaVuSans-BoldOblique.ttf'));
 
     // ── WATERMARK (centered logo, low opacity) ────────────────────────────
-    if (fs.existsSync(logoPath)) {
+    if (logoPath && fs.existsSync(logoPath)) {
       doc.save();
       doc.opacity(0.05);
       const wmSize = 450;
@@ -156,7 +166,7 @@ const generateInvoicePDF = async (res, data) => {
     const headerHeight = 78;
     const logoSize = 60;
 
-    if (fs.existsSync(logoPath)) {
+    if (logoPath && fs.existsSync(logoPath)) {
       doc.image(logoPath, MARGIN, y, { width: logoSize, height: logoSize });
     }
     const titleColW = 250;
@@ -172,16 +182,16 @@ const generateInvoicePDF = async (res, data) => {
 
     // right side title
     doc.font('DejaVu-Bold').fontSize(16).fillColor(COLORS.primary)
-       .text('BURSARY INVOICE', dividerX + 16, y + 4, { width: W - dividerX - 16 - MARGIN, align: 'left' });
+       .text('PAYMENT RECEIPT', dividerX + 16, y + 4, { width: W - dividerX - 16 - MARGIN, align: 'left' });
     doc.font('DejaVu').fontSize(8.5).fillColor(COLORS.textSecondary)
-       .text('Official program billing information and current payment outstanding details.',
+       .text('This is to officially confirm that payment has been received as detailed below.',
              dividerX + 16, y + 40, { width: W - dividerX - 16 - MARGIN });
 
     y += headerHeight;
     doc.moveTo(MARGIN, y).lineTo(W - MARGIN, y).lineWidth(1.5).strokeColor(COLORS.primary).stroke();
     y += 24;
 
-    // ── BODY: TWO COLUMNS (Billed To | Invoice Details) ──────────────────────
+    // ── BODY: TWO COLUMNS (Paid By | Receipt Details) ────────────────────────
     const colGap = 24;
     const leftColW  = (CONTENT_W - colGap) * 0.45;
     const rightColW = (CONTENT_W - colGap) * 0.55;
@@ -189,19 +199,20 @@ const generateInvoicePDF = async (res, data) => {
 
     const sectionTop = y;
 
-    // -- Left column: Billed To --
+    // -- Left column: Paid By --
     drawIconBadge(doc, 'user', MARGIN + 11, y + 11, 11);
     doc.font('DejaVu-Bold').fontSize(12).fillColor(COLORS.primaryDark)
-       .text('Billed To', MARGIN + 30, y + 4);
+       .text('Paid By', MARGIN + 30, y + 4);
     y += 26;
 
     const leftFields = [
-      ['Name:', data.fullName],
-      ['Matric Number:', data.matricNumber],
+      ['Name:', data.studentName],
+      ['Matric Number:', data.matricNo],
       ['Department:', data.department],
-      ['Level:', data.level || 'N/A'],
-      ['Phone Number:', data.phoneNumber || 'N/A'],
-      ['Email Address:', data.email || 'N/A'],
+      ['Faculty:', data.faculty],
+      ['Level:', data.level],
+      ['Phone Number:', data.phoneNumber],
+      ['Email Address:', data.email],
     ];
     const leftLabelW = 100;
     let fieldY = y;
@@ -211,18 +222,20 @@ const generateInvoicePDF = async (res, data) => {
     });
     const leftColBottom = fieldY;
 
-    // -- Right column: Invoice Details card --
+    // -- Right column: Receipt Details card --
     const cardX = rightColX;
     const cardY = sectionTop;
     const cardW = rightColW;
     const rFields = [
-      ['Invoice Number:', data.invoiceId],
-      ['Billing Date:', data.invoiceDate],
-      ['Academic Session:', data.academicSession],
-      ['Payment Status:', data.status],
+      ['Receipt Number:', data.receiptNo],
+      ['Transaction ID:', data.transactionId],
+      ['Payment Date:', data.paymentDate],
+      ['Payment Time:', data.paymentTime],
+      ['Payment Method:', data.paymentMethod],
+      ['Payment Channel:', data.paymentChannel],
     ];
     const cardPadding = 14;
-    const rLabelW = 110;
+    const rLabelW = 100;
     const rFieldWidth = cardW - cardPadding * 2;
     let fieldsHeight = 0;
     rFields.forEach(([label, value]) => {
@@ -232,7 +245,7 @@ const generateInvoicePDF = async (res, data) => {
       );
       fieldsHeight += h + 11;
     });
-    const amountWordsText = numToWords(data.totalAmount);
+    const amountWordsText = data.amountInWords || numToWords(data.amount);
     const amountBoxPad = 14;
     const wordsHeight = doc.heightOfString(amountWordsText, { width: cardW - cardPadding * 2 - amountBoxPad * 2, fontSize: 9 });
     const amountBoxHeight = amountBoxPad * 2 + 20 + 8 + 11 + wordsHeight;
@@ -244,7 +257,7 @@ const generateInvoicePDF = async (res, data) => {
     let ry = cardY + cardPadding;
     drawIconBadge(doc, 'receipt', cardX + cardPadding + 11, ry + 7, 11);
     doc.font('DejaVu-Bold').fontSize(12).fillColor(COLORS.primaryDark)
-       .text('Invoice Details', cardX + cardPadding + 30, ry);
+       .text('Receipt Details', cardX + cardPadding + 30, ry);
     ry += 24;
 
     rFields.forEach(([label, value]) => {
@@ -252,15 +265,15 @@ const generateInvoicePDF = async (res, data) => {
       ry += used;
     });
 
-    // Total Amount Billed box (inside the card)
+    // Amount paid box (inside the card)
     ry += 6;
     const amtBoxW = cardW - cardPadding * 2;
     doc.roundedRect(cardX + cardPadding, ry, amtBoxW, amountBoxHeight, 10).fill(COLORS.primary);
-    doc.font('DejaVu-Bold').fontSize(9).fillColor('#FFFFFF')
-       .text('Total Session Bill', cardX + cardPadding + amountBoxPad, ry + amountBoxPad);
-    doc.font('DejaVu-Bold').fontSize(14).fillColor('#FFFFFF')
-       .text(`\u20A6${fmtMoney(data.totalAmount)}`, cardX + cardPadding + amountBoxPad + 80, ry + amountBoxPad - 2,
-             { width: amtBoxW - amountBoxPad * 2 - 80, align: 'right' });
+    doc.font('DejaVu-Bold').fontSize(10.5).fillColor('#FFFFFF')
+       .text('Amount Paid', cardX + cardPadding + amountBoxPad, ry + amountBoxPad);
+    doc.font('DejaVu-Bold').fontSize(17).fillColor('#FFFFFF')
+       .text(`\u20A6${fmtMoney(data.amount)}`, cardX + cardPadding + amountBoxPad + 90, ry + amountBoxPad - 3,
+             { width: amtBoxW - amountBoxPad * 2 - 90, align: 'right' });
 
     const wordsY = ry + amountBoxPad + 24;
     doc.font('DejaVu').fontSize(8.5).fillColor('#E8F5EE')
@@ -275,7 +288,7 @@ const generateInvoicePDF = async (res, data) => {
     // ── PAYMENT BREAKDOWN TABLE ──────────────────────────────────────────────
     drawIconBadge(doc, 'list', MARGIN + 11, y + 11, 11);
     doc.font('DejaVu-Bold').fontSize(12).fillColor(COLORS.primaryDark)
-       .text('Fee Breakdown Items', MARGIN + 30, y + 4);
+       .text('Payment Breakdown', MARGIN + 30, y + 4);
     y += 26;
 
     const tableX = MARGIN;
@@ -286,11 +299,11 @@ const generateInvoicePDF = async (res, data) => {
     doc.rect(tableX, y, CONTENT_W, rowH).fill(COLORS.tableHeaderBg);
     doc.font('DejaVu-Bold').fontSize(9).fillColor(COLORS.primaryDark)
        .text('S/N', tableX + 14, y + 8, { width: colSN - 14 });
-    doc.text('Fee Component Description', tableX + colSN, y + 8, { width: colDesc });
+    doc.text('Description', tableX + colSN, y + 8, { width: colDesc });
     doc.text('Amount (\u20A6)', tableX + colSN + colDesc, y + 8, { width: colAmt - 14, align: 'right' });
     y += rowH;
 
-    const items = data.feeItems || [];
+    const items = data.breakdownItems || [];
     items.forEach((item, idx) => {
       doc.font('DejaVu').fontSize(9.5).fillColor(COLORS.text)
          .text(String(idx + 1), tableX + 14, y + 7, { width: colSN - 14 });
@@ -308,32 +321,19 @@ const generateInvoicePDF = async (res, data) => {
     doc.moveTo(tableX, y).lineTo(tableX + CONTENT_W, y).strokeColor(COLORS.border).lineWidth(1).stroke();
     y += 10;
 
-    // total, paid, and outstanding rows
-    doc.font('DejaVu-Bold').fontSize(10).fillColor(COLORS.textSecondary)
-       .text('Total Session Bill', tableX + 14, y, { width: colDesc });
-    doc.text(`\u20A6${fmtMoney(data.totalAmount)}`, tableX + colSN + colDesc, y,
+    // total row (no fill, just bold text like reference)
+    doc.font('DejaVu-Bold').fontSize(10.5).fillColor(COLORS.primary)
+       .text('Total Paid', tableX + 14, y, { width: colDesc });
+    doc.text(`\u20A6${fmtMoney(data.amount)}`, tableX + colSN + colDesc, y,
               { width: colAmt - 14, align: 'right' });
-    y += 18;
-
-    doc.font('DejaVu-Bold').fontSize(10).fillColor(COLORS.primary)
-       .text('Total Paid To Date', tableX + 14, y, { width: colDesc });
-    doc.text(`\u20A6${fmtMoney(data.totalPaid)}`, tableX + colSN + colDesc, y,
-              { width: colAmt - 14, align: 'right' });
-    y += 18;
-
-    const isOutstanding = data.outstanding > 0;
-    doc.font('DejaVu-Bold').fontSize(10.5).fillColor(isOutstanding ? '#D97706' : COLORS.primary)
-       .text('Outstanding Balance', tableX + 14, y, { width: colDesc });
-    doc.text(`\u20A6${fmtMoney(data.outstanding)}`, tableX + colSN + colDesc, y,
-              { width: colAmt - 14, align: 'right' });
-    y += 26;
+    y += 22;
 
     // ── VERIFICATION SECTION ─────────────────────────────────────────────────
     const verifyColGap = 20;
     const verifyLeftW = CONTENT_W * 0.5;
     const verifyRightW = CONTENT_W - verifyLeftW - verifyColGap;
     const verifyRightX = MARGIN + verifyLeftW + verifyColGap;
-    const verifyMsg = 'This invoice represents the official billing statement generated from the university registration portal.\n\nPayments must be processed online through the secure Paystack checkout.';
+    const verifyMsg = 'This payment has been successfully received and recorded in the Caleb University Bursary System.\n\nNo further action is required.';
     const verifyMsgH = doc.heightOfString(verifyMsg, { width: verifyLeftW - 64, fontSize: 8.5 });
     const verifyH = Math.max(95, 36 + verifyMsgH);
 
@@ -342,13 +342,13 @@ const generateInvoicePDF = async (res, data) => {
     doc.roundedRect(MARGIN, y, verifyLeftW, verifyH, 10).lineWidth(1).strokeColor(COLORS.border).stroke();
     drawIconBadge(doc, 'shield', MARGIN + 27, y + 27, 11);
     doc.font('DejaVu-Bold').fontSize(11).fillColor(COLORS.primaryDark)
-       .text('Official Invoice Statement', MARGIN + 46, y + 20);
+       .text('Payment Verified', MARGIN + 46, y + 20);
     doc.font('DejaVu').fontSize(8.5).fillColor(COLORS.textSecondary)
        .text(verifyMsg, MARGIN + 22, y + 44, { width: verifyLeftW - 44 });
 
-    // right: signature line
+    // right: signature line (no signature image — left blank for ink/digital sign)
     doc.font('DejaVu').fontSize(8).fillColor(COLORS.textSecondary)
-       .text(data.invoiceDate || '', verifyRightX, y, { width: verifyRightW, align: 'right' });
+       .text(data.paymentDate || '', verifyRightX, y, { width: verifyRightW, align: 'right' });
     doc.moveTo(verifyRightX, y + verifyH - 28).lineTo(verifyRightX + verifyRightW, y + verifyH - 28)
        .strokeColor(COLORS.textSecondary).lineWidth(0.7).stroke();
     doc.font('DejaVu-Bold').fontSize(9.5).fillColor(COLORS.text)
@@ -362,12 +362,44 @@ const generateInvoicePDF = async (res, data) => {
     const footerH = 36;
     doc.rect(0, H - footerH, W, footerH).fill(COLORS.primary);
     doc.font('DejaVu').fontSize(8).fillColor('#FFFFFF')
-       .text('This invoice is computer-generated and valid without a physical signature.',
+       .text('This receipt is computer-generated and valid without a signature.',
              MARGIN, H - footerH + 13, { width: CONTENT_W, align: 'center' });
 
     doc.end();
-    resolve();
   });
-};
+}
 
-module.exports = { generateInvoicePDF };
+module.exports = { generateReceipt, numToWords };
+
+
+// ── Standalone test ────────────────────────────────────────────────────────
+if (require.main === module) {
+  const OUT  = path.join(__dirname, 'test-receipt-v2.pdf');
+  const LOGO = path.join(__dirname, '..', 'caleb-logo.jpg');
+
+  generateReceipt({
+    studentName:     'Moses Azuoru',
+    matricNo:        'CU/2023/06146',
+    department:      'Computer Science',
+    faculty:         'Faculty of Natural and Applied Sciences',
+    level:           '400',
+    phoneNumber:     '+234 803 123 4567',
+    email:           'moses.azuoru@calebuniversity.edu.ng',
+    receiptNo:       'SRCPT/01/142079',
+    transactionId:   'PSK-REF-20250626-001',
+    paymentDate:     '26-Jun-2025',
+    paymentTime:     '10:42 AM',
+    paymentMethod:   'Card Payment',
+    paymentChannel:  'Paystack',
+    amount:          125000.00,
+    breakdownItems: [
+      { description: 'School Fees',        amount: 100000.00 },
+      { description: 'Development Levy',   amount: 15000.00 },
+      { description: 'ICT Levy',           amount: 5000.00 },
+      { description: 'Student Welfare',    amount: 5000.00 },
+    ],
+    signedBy: 'Bursary Department',
+  }, OUT, LOGO)
+    .then(p => console.log('Receipt generated:', p))
+    .catch(console.error);
+}

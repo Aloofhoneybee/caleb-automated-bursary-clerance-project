@@ -132,7 +132,7 @@ const generateReceiptPDF = async (res, data) => {
     doc.pipe(res);
 
     // Register Unicode-capable fonts so the ₦ (Naira) symbol renders correctly
-    const recieptDir = path.join(__dirname, '..', '..', 'reciept');
+    const recieptDir = path.join(__dirname, '..', 'reciept');
     doc.registerFont('DejaVu',             path.join(recieptDir, 'DejaVuSans.ttf'));
     doc.registerFont('DejaVu-Bold',        path.join(recieptDir, 'DejaVuSans-Bold.ttf'));
     doc.registerFont('DejaVu-Oblique',     path.join(recieptDir, 'DejaVuSans-Oblique.ttf'));
