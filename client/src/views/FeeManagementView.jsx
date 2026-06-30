@@ -289,11 +289,11 @@ export default function FeeManagementView({ setCurrentTab }) {
   return (
     <div className="space-y-6 pb-12 select-none animate-in fade-in slide-in-from-bottom-4 duration-300">
       
-      {/* Vertical Stack Layout */}
-      <div className="space-y-6">
+      {/* Responsive Row Layout */}
+      <div className="flex flex-col lg:flex-row items-start gap-6">
         
         {/* --- FEE CONFIGURATION --- */}
-        <Card>
+        <Card className="flex-1 lg:flex-[1.7] w-full">
           {/* Header Block */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
             <div className="space-y-1">
@@ -429,7 +429,7 @@ export default function FeeManagementView({ setCurrentTab }) {
         </Card>
 
         {/* --- HOSTEL FEE MANAGEMENT --- */}
-        <Card>
+        <Card className="flex-1 lg:flex-[1] w-full">
           {/* Header Block */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div className="space-y-1">
@@ -448,18 +448,18 @@ export default function FeeManagementView({ setCurrentTab }) {
           <div className="space-y-3.5">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Hostel Summary</h3>
             <div className="border border-slate-200 rounded-2xl overflow-x-auto bg-white shadow-sm">
-              <table className="w-full text-left border-collapse text-[12px]">
+              <table className="w-full text-left border-collapse text-[10.5px] lg:text-[11px]">
                 <thead>
                   <tr className="bg-slate-50 text-[9px] font-bold text-slate-400 tracking-wider uppercase border-b border-slate-200">
-                    <th className="px-4 py-3">Hostel Name</th>
-                    <th className="px-4 py-3 text-right">Rate/Fee</th>
+                    <th className="px-4 py-2.5">Hostel Name</th>
+                    <th className="px-4 py-2.5 text-right pr-[28px]">Rate/Fee</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {hostels.map((row) => (
                     <tr key={row._id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 font-semibold text-slate-800 capitalize">{row.name}</td>
-                      <td className="px-4 py-3 text-right font-extrabold text-slate-900 font-mono whitespace-nowrap">
+                      <td className="px-4 py-2.5 font-semibold text-slate-800 capitalize whitespace-nowrap">{row.name}</td>
+                      <td className="px-4 py-2.5 text-right font-extrabold text-slate-900 font-mono whitespace-nowrap">
                         <div className="flex items-center justify-end gap-2">
                           <span>₦{row.amount.toLocaleString()}</span>
                           <button

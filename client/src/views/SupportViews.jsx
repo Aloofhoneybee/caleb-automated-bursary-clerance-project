@@ -266,8 +266,13 @@ export function InvoicesView({ studentData, feeStructure }) {
         }
       });
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || 'Failed to download invoice PDF');
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || 'Failed to download invoice');
+      }
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/pdf')) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || 'Server did not return a PDF');
       }
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -377,8 +382,13 @@ export function PaymentHistoryView({ transactions }) {
         }
       });
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || 'Failed to download payment receipt PDF');
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || 'Failed to download receipt');
+      }
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/pdf')) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || 'Server did not return a PDF');
       }
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);

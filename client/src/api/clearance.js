@@ -19,7 +19,15 @@ export const downloadCertificate = async () => {
   const response = await fetch('/api/clearance/certificate', {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!response.ok) throw new Error('Failed to download certificate');
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || 'Failed to download certificate');
+  }
+  const contentType = response.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/pdf')) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.message || 'Server did not return a PDF');
+  }
   const blob = await response.blob();
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement('a');

@@ -11,13 +11,13 @@ const paystackAPI = axios.create({
 });
 
 // Initialize a payment transaction
-const initializeTransaction = async ({ email, amount, reference, metadata }) => {
+const initializeTransaction = async ({ email, amount, reference, metadata, callbackUrl }) => {
   const response = await paystackAPI.post('/transaction/initialize', {
     email,
     amount: amount * 100, // Paystack works in kobo
     reference,
     metadata,
-    callback_url: `${process.env.CLIENT_URL}/payment/verify`,
+    callback_url: callbackUrl || `${process.env.CLIENT_URL}/payment/verify`,
   });
   return response.data;
 };

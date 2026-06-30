@@ -50,11 +50,15 @@ const initializePayment = async (req, res) => {
     // Generate a unique reference
     const reference = `BCS-${student.matricNumber.replace(/\//g, '-')}-${Date.now()}`;
 
+    // Determine the dynamic client origin from headers (supports localhost, 127.0.0.1, Vercel preview domains)
+    const clientOrigin = req.headers.origin || process.env.CLIENT_URL || 'http://localhost:5173';
+
     // Initialize with Paystack
     const paystackResponse = await initializeTransaction({
       email: student.email,
       amount: checkAmount,
       reference,
+      callbackUrl: `${clientOrigin}/payment/verify`,
       metadata: {
         studentId: student._id.toString(),
         matricNumber: student.matricNumber,

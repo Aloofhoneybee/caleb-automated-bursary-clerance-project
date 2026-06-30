@@ -21,6 +21,11 @@ const generateClearanceCertificate = async (res, clearanceData) => {
 
   doc.pipe(res);
 
+  // Register Unicode-capable fonts so the ₦ (Naira) symbol and rich text renders correctly
+  const recieptDir = path.join(__dirname, '..', 'reciept');
+  doc.registerFont('DejaVu',             path.join(recieptDir, 'DejaVuSans.ttf'));
+  doc.registerFont('DejaVu-Bold',        path.join(recieptDir, 'DejaVuSans-Bold.ttf'));
+
   const W = 842;
   const H = 595;
 
@@ -97,23 +102,52 @@ const generateClearanceCertificate = async (res, clearanceData) => {
   doc.font('Helvetica').fontSize(11).fillColor('#64748B').text('Matriculation Number: ', startX, underlineY + 8, { lineBreak: false });
   doc.font('Helvetica-Bold').fontSize(11).fillColor('#0F172A').text(matricNumber, startX + labelWidth, underlineY + 8, { lineBreak: false });
 
-  // 10. Statement & Declared Status Body (Combined into a single paragraph)
+  // 10. Statement & Declared Status Body (Unified paragraph to prevent PDFKit alignment overlaps)
   doc.y = underlineY + 28;
   doc.fillColor('#475569');
   doc.font('Helvetica').fontSize(11.2);
   
   const isFirstSemesterOnly = scope === 'first_semester';
+  const cleanDept = department ? department.replace('B.Sc. ', '') : 'Computer Science';
+  const cleanHostel = hostelName || 'assigned hall';
+  const paragraphWidth = W - 160;
+  const paragraphOptions = { align: 'center', width: paragraphWidth, lineGap: 5 };
 
   const combinedText = isFirstSemesterOnly
-    ? `Has successfully fulfilled first semester financial obligations (50% payment threshold) for the ${academicSession} Academic Session, including tuition fees, levies, and accommodation fees in respect of the Department of ${department ? department.replace('B.Sc. ', '') : 'Computer Science'}. Accordingly, the student is hereby declared CLEARED (First Semester Only) from the University Bursary. This clearance allows access ONLY for first semester exams and activities. To continue in the second semester, the remaining 50% balance must be fully paid. The student is cleared for accommodation and is assigned to stay in ${hostelName || 'assigned hall'}.`
-    : `Has successfully fulfilled all financial obligations for the ${academicSession} Academic Session, including tuition fees, levies, and accommodation fees in respect of the Department of ${department ? department.replace('B.Sc. ', '') : 'Computer Science'}. Accordingly, the student is hereby declared CLEARED from the University Bursary. The student is cleared for accommodation and is assigned to stay in ${hostelName || 'assigned hall'}.`;
-    
+    ? `Has successfully fulfilled first semester financial obligations (50% payment threshold) for the ${academicSession} Academic Session, including tuition fees, levies, and accommodation fees in respect of the Department of ${cleanDept}. Accordingly, the student is hereby declared CLEARED (First Semester Only) from the University Bursary. This clearance allows access ONLY for first semester exams and activities. To continue in the second semester, the remaining 50% balance must be fully paid. The student is cleared for accommodation and is assigned to stay in ${cleanHostel}.`
+    : `Has successfully fulfilled all financial obligations for the ${academicSession} Academic Session, including tuition fees, levies, and accommodation fees in respect of the Department of ${cleanDept}. Accordingly, the student is hereby declared CLEARED from the University Bursary. The student is cleared for accommodation and is assigned to stay in ${cleanHostel}.`;
+
   doc.text(combinedText, 80, doc.y, { align: 'center', width: W - 160, lineGap: 5 });
 
+  // 11. Premium Highlight Banner for Status, Hostel Allocation & Total Fees
+  const boxY = doc.y + 12;
+  const boxHeight = 56;
+  const boxWidth = W - 200;
+  const boxX = 100;
+
+  doc.save();
+  doc.fillColor('#F0FDF4').roundedRect(boxX, boxY, boxWidth, boxHeight, 8).fill();
+  doc.strokeColor('#A7F3D0').lineWidth(1).roundedRect(boxX, boxY, boxWidth, boxHeight, 8).stroke();
+  doc.restore();
+
+  doc.y = boxY + 12;
+  
+  // Left Column: Clearance Type
+  doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#065F46')
+    .text(isFirstSemesterOnly ? 'STATUS: 50% CLEARANCE (FIRST SEMESTER ONLY)' : 'STATUS: 100% CLEARANCE (FULL ACADEMIC SESSION)', boxX + 20, doc.y, { lineBreak: false });
+
+  // Right Column: Hostel Assignment
+  const hostelText = `HOSTEL: ${cleanHostel.toUpperCase()}`;
+  const hostelTextWidth = doc.font('Helvetica-Bold').fontSize(9.5).widthOfString(hostelText);
+  doc.font('Helvetica-Bold').fontSize(9.5).fillColor('#065F46')
+    .text(hostelText, boxX + boxWidth - hostelTextWidth - 20, doc.y, { lineBreak: false });
+
+  // Row 2: Total Fees Paid
   if (totalFees) {
-    doc.y = doc.y + 14;
+    const row2Y = boxY + 34;
+    doc.y = row2Y;
     doc.fillColor('#0F172A');
-    doc.font('Helvetica-Bold').fontSize(11.5).text(`Total Bursary Fees Paid: ₦${totalFees.toLocaleString()}`, 60, doc.y, { align: 'center', width: W - 120 });
+    doc.font('DejaVu-Bold').fontSize(10.5).text(`Total Bursary Fees Paid: ₦${totalFees.toLocaleString()}`, boxX, doc.y, { align: 'center', width: boxWidth });
   }
 
   // 12. Signatures and Verification QR Code
@@ -134,10 +168,10 @@ const generateClearanceCertificate = async (res, clearanceData) => {
   doc.fillColor('#94A3B8');
   doc.font('Helvetica-Bold').fontSize(8.5).text('UNIVERSITY BURSAR', W - 100 - sigColW, sigRowY + 38, { width: sigColW, align: 'center' });
 
-  // Center QR Code
-  const qrSize = 64;
+  // Center QR Code (Lowered Y coordinate to sigRowY + 8 to align perfectly with signatures)
+  const qrSize = 60;
   const qrX = (W - qrSize) / 2;
-  doc.image(qrImageBuffer, qrX, sigRowY - 5, { width: qrSize, height: qrSize });
+  doc.image(qrImageBuffer, qrX, sigRowY + 8, { width: qrSize, height: qrSize });
   
   // Security Reference token string under QR code
   doc.fillColor('#64748B');

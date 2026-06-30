@@ -262,12 +262,19 @@ const [currentRole, setRoleState] = useState('student'); // 'student', 'admin', 
             });
             setRefreshTrigger(prev => prev + 1);
             fetchNotifications();
+            setTimeout(() => {
+              window.history.replaceState({}, document.title, '/');
+              setCurrentTab('payments');
+            }, 3000);
           })
           .catch((err) => {
             setVerificationResult({
               success: false,
               message: err.message || 'Payment verification failed. If you were debited, please contact the Bursary.'
             });
+            setTimeout(() => {
+              window.history.replaceState({}, document.title, '/');
+            }, 5000);
           })
           .finally(() => {
             setVerifyingPayment(false);
